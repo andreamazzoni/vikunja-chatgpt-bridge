@@ -1,70 +1,60 @@
 # vikunja-chatgpt-bridge
 
-Collega Vikunja self-hosted a ChatGPT tramite **OpenAI Secure MCP Tunnel**, con un
-solo container: il `tunnel-client` ufficiale. Nessun server MCP aggiuntivo, proxy,
-porta pubblicata o modifica alla configurazione di Vikunja/TrueNAS.
+Connect self-hosted Vikunja to ChatGPT through OpenAI Secure MCP Tunnel.
+Docker Compose runs the official tunnel-client and forwards MCP requests to
+Vikunja over HTTPS.
 
-```text
-ChatGPT → servizio Secure MCP Tunnel OpenAI
-          ↑ HTTPS in uscita: polling e risposte
-          tunnel-client sul Raspberry Pi → HTTPS → Vikunja su TrueNAS
-                                          Authorization: Bearer …
-```
-
-Il Bearer Vikunja è risolto da un file locale dal client, mediante
-`MCP_EXTRA_HEADERS: "Authorization: file:/run/secrets/vikunja_authorization"`.
-Il file contiene **l'intero valore `Bearer …`**, non solo il token. Non servono
-script di avvio, variabili con il token o interpolazioni nel file YAML.
-
-| Componente | Versione / requisito |
+| Component | Version or requirement |
 | --- | --- |
-| Vikunja con MCP integrato | **2.7.0+**; endpoint `/api/v2/mcp`, Streamable HTTP |
-| tunnel-client | **0.0.19**, immagine ufficiale fissata anche per digest |
-| Piattaforme dell'immagine | Linux ARM64 e AMD64 |
-| Host | Docker Engine, Docker Compose v2+, Python 3.11+ per gli script locali |
+| Vikunja | **2.7.0+** with built-in MCP at `/api/v2/mcp` over Streamable HTTP |
+| tunnel-client | **0.0.19**, official image pinned by digest |
+| Host | Docker Engine, Docker Compose v2+, Python 3.11+ for local scripts |
 
-## Requisiti
+## Requirements
 
-Linux ARM64 o AMD64, Docker con Compose, Python 3.11+, Vikunja raggiungibile
-via HTTPS e un tunnel OpenAI dedicato associato al workspace ChatGPT.
-Per il primo avvio usare un token MCP Vikunja **Read only**.
+- A Linux host with HTTPS access to Vikunja and the OpenAI control plane.
+- A dedicated OpenAI tunnel associated with the target ChatGPT workspace.
+- A Vikunja MCP token with the **Read only** preset for the first connection.
 
-## Avvio rapido
+The deployment was tested on ARM64 through ChatGPT. The official image also
+provides an AMD64 manifest. See the [verification record](docs/verification.md).
 
-Dalla cartella del progetto, dopo aver creato tunnel e credenziali, eseguire
-in un terminale locale:
+## Quick start
+
+After creating the tunnel and credentials, run this command from the project
+directory in a local terminal:
 
 ```sh
 python3 scripts/bridge.py install
 ```
 
-L’installazione scarica l’immagine fissata, chiede i segreti con input
-nascosto, verifica Compose e TLS e avvia il container dopo la conferma.
-Collegare quindi il tunnel a ChatGPT con **No Authentication**. Il client
-aggiunge il token Vikunja sul collegamento locale.
+The installer downloads the pinned image, collects credentials with hidden
+input, checks Compose and TLS, and starts the container after confirmation.
+Connect the tunnel to ChatGPT using **No Authentication**. The tunnel client
+adds the Vikunja Bearer token on the local HTTPS connection.
 
-## Comandi
+## Commands
 
-| Operazione | Comando |
+| Operation | Command |
 | --- | --- |
-| Prima installazione guidata | `python3 scripts/bridge.py install` |
-| Preparare l’immagine fissata | `python3 scripts/bridge.py build` |
-| Verificare configurazione e TLS | `python3 scripts/bridge.py validate` |
-| Stato e ultimo probe | `python3 scripts/bridge.py status` |
-| Handshake e catalogo MCP | `python3 scripts/bridge.py probe` |
-| Avvio | `python3 scripts/bridge.py start --single-instance-confirmed` |
-| Arresto | `python3 scripts/bridge.py stop` |
-| Riavvio | `python3 scripts/bridge.py restart` |
-| Aggiornamento | `python3 scripts/bridge.py update --image IMMAGINE_FISSATA` |
-| Ripristino immagine precedente | `python3 scripts/bridge.py rollback` |
-| Rimozione del deployment e dei segreti locali | `python3 scripts/bridge.py reset` |
+| Guided installation | `python3 scripts/bridge.py install` |
+| Download the pinned image | `python3 scripts/bridge.py build` |
+| Validate configuration and TLS | `python3 scripts/bridge.py validate` |
+| Container status and last probe | `python3 scripts/bridge.py status` |
+| MCP handshake and tool catalog | `python3 scripts/bridge.py probe` |
+| Start | `python3 scripts/bridge.py start --single-instance-confirmed` |
+| Stop | `python3 scripts/bridge.py stop` |
+| Restart | `python3 scripts/bridge.py restart` |
+| Update | `python3 scripts/bridge.py update --image PINNED_IMAGE` |
+| Restore the previous image | `python3 scripts/bridge.py rollback` |
+| Remove the deployment and local credentials | `python3 scripts/bridge.py reset` |
 
-`status` e `probe` accettano `--json`. Il probe elenca gli strumenti MCP
-senza eseguirli. Per `build` il bridge Vikunja usa l’immagine ufficiale
-direttamente.
+`status` and `probe` accept `--json`. The probe lists MCP tools without
+executing them. The CLI follows the TrueNAS bridge conventions. Here, `build`
+pulls an existing official image.
 
-## Guide
+## Guides
 
-[Configurazione](docs/setup.md) · [Operazioni](docs/operations.md) ·
-[Architettura](docs/architecture.md) · [Sviluppo](docs/development.md) ·
-[Verifiche](docs/verification.md) · [Licenze](docs/licensing.md)
+[Setup](docs/setup.md) · [Operations](docs/operations.md) ·
+[Architecture](docs/architecture.md) · [Development](docs/development.md) ·
+[Verification](docs/verification.md) · [Licensing](docs/licensing.md)

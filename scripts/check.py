@@ -28,7 +28,7 @@ def client(cfg, root=ROOT):
 
 def rpc(opener, url, authorization, method, request_id, params=None, session=None, protocol="2025-03-26"):
     if method not in {"initialize", "notifications/initialized", "tools/list"}:
-        raise ConfigError("Il controllo non consente chiamate agli strumenti")
+        raise ConfigError("The probe only permits MCP initialization and tool discovery")
     data = {"jsonrpc": "2.0", "method": method}
     if request_id is not None:
         data["id"] = request_id
@@ -50,7 +50,7 @@ def rpc(opener, url, authorization, method, request_id, params=None, session=Non
                 line = response.readline(LIMIT + 1)
                 size += len(line)
                 if size > LIMIT:
-                    raise ConfigError("Risposta MCP oltre il limite locale")
+                    raise ConfigError("MCP response exceeds the local size limit")
                 if not line or line in (b"\n", b"\r\n"):
                     if event:
                         message = json.loads(b"\n".join(event))
@@ -58,17 +58,17 @@ def rpc(opener, url, authorization, method, request_id, params=None, session=Non
                             break
                         event = []
                     if not line:
-                        raise ConfigError("Stream MCP terminato senza risposta")
+                        raise ConfigError("MCP stream ended without a response")
                 elif line.startswith(b"data:"):
                     event.append(line[5:].strip())
         else:
             raw = response.read(LIMIT + 1)
             if len(raw) > LIMIT:
-                raise ConfigError("Risposta MCP oltre il limite locale")
+                raise ConfigError("MCP response exceeds the local size limit")
             message = json.loads(raw)
     if (not isinstance(message, dict) or message.get("id") != request_id
             or "error" in message or not isinstance(message.get("result"), dict)):
-        raise ConfigError("MCP ha restituito un errore o una risposta inattesa; contenuto omesso")
+        raise ConfigError("MCP returned an error or an unexpected response. Content omitted")
     return message["result"], session
 
 
@@ -87,20 +87,20 @@ def probe(cfg, root=ROOT):
                               {"cursor": cursor} if cursor else {}, session, protocol)
         page_tools = result.get("tools")
         if not isinstance(page_tools, list) or not all(isinstance(t, dict) for t in page_tools):
-            raise ConfigError("Catalogo MCP non valido; contenuto omesso")
+            raise ConfigError("Invalid MCP catalog. Content omitted")
         tools.extend(page_tools)
         cursor = result.get("nextCursor")
         if not cursor:
             break
         if cursor in seen:
-            raise ConfigError("Paginazione MCP ripetuta")
+            raise ConfigError("Repeated MCP pagination cursor")
         seen.add(cursor)
     else:
-        raise ConfigError("Catalogo MCP oltre il limite di pagine")
+        raise ConfigError("MCP catalog exceeds the page limit")
     # Do not print server descriptions, task contents, arbitrary errors or schemas.
     names = [t.get("name", "") for t in tools]
     if not all(isinstance(n, str) and n and len(n) <= 128 and all(c.isalnum() or c in "_.-" for c in n) for n in names):
-        raise ConfigError("Nome strumento non valido; contenuto omesso")
+        raise ConfigError("Invalid tool name. Content omitted")
     print(json.dumps({"mcp_connection": "ok", "transport": "Streamable HTTP", "tool_count": len(names),
                       "tools": sorted(names), "tools_called": 0}, ensure_ascii=True))
 
@@ -113,7 +113,7 @@ def main():
     validate_url(cfg["VIKUNJA_MCP_URL"])
     validate_tunnel(cfg["OPENAI_TUNNEL_ID"])
     if cfg["BRIDGE_UID"] != str(os.getuid()) or cfg["BRIDGE_GID"] != str(os.getgid()):
-        raise ConfigError("UID/GID devono corrispondere all'utente che esegue i controlli")
+        raise ConfigError("UID/GID must match the user running the checks")
     read_secret(ROOT / "secrets/openai_api_key")
     read_secret(ROOT / "secrets/vikunja_authorization", bearer=True)
     tls_context(cfg)
@@ -126,17 +126,17 @@ def main():
         with socket.create_connection((url.hostname, url.port or 443), timeout=10) as sock:
             with tls_context(cfg).wrap_socket(sock, server_hostname=url.hostname):
                 pass
-        print("DNS, TCP e TLS verificati dall'host; nessun token inviato")
+        print("Host DNS, TCP, and TLS checks passed")
     else:
-        print("URL, tunnel ID, UID/GID, CA e file segreti: OK (valori omessi)")
+        print("URL, tunnel ID, UID/GID, CA, and secret files validated")
 
 
 if __name__ == "__main__":
     try:
         main()
     except urllib.error.HTTPError as exc:
-        print(f"Controllo fallito: HTTP {exc.code}; corpo e header omessi", file=sys.stderr)
+        print(f"Check failed with HTTP {exc.code}. Body and headers omitted", file=sys.stderr)
         sys.exit(1)
     except (ConfigError, OSError, ValueError, KeyError, TypeError, ssl.SSLError, urllib.error.URLError) as exc:
-        print(str(exc) if isinstance(exc, ConfigError) else "Controllo fallito: verificare configurazione, rete, TLS e autenticazione", file=sys.stderr)
+        print(str(exc) if isinstance(exc, ConfigError) else "Check failed. Verify configuration, networking, TLS, and authentication", file=sys.stderr)
         sys.exit(1)

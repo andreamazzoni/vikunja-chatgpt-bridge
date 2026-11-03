@@ -1,2 +1,2 @@
-# Non si costruisce un'immagine locale. Escludere comunque tutto da build accidentali.
+# Exclude all files from accidental local builds.
 **

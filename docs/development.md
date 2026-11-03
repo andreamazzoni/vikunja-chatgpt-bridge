@@ -1,29 +1,25 @@
-# Sviluppo e test
-
-## Sviluppo e verifiche ripetibili
+# Development and testing
 
 ```sh
 docker compose --env-file .env.example config --quiet
 python3 -m unittest discover -s tests -p 'test_*.py' -v
-docker compose pull
+docker compose --env-file .env.example pull
 python3 tests/integration.py
 ```
 
-I test richiedono Python, OpenSSL e, per l'integrazione, Docker su Linux. Creano
-certificati e credenziali **fittizi**, server HTTPS su loopback e un progetto
-Compose temporaneo con nome casuale. L'override di test usa la rete host soltanto
-per raggiungere le fixture loopback; il deployment normale usa la rete Docker.
-Non caricano `.env` o secrets reali, non contattano OpenAI/Vikunja reali e rimuovono
-i container di prova alla fine. Non eseguire contemporaneamente più copie del
-test sulla stessa macchina.
+The tests require Python and OpenSSL. Integration also requires Docker on
+Linux. The fixture generates a temporary CA and test credentials, starts
+loopback HTTPS servers, and runs the pinned client in a uniquely named
+Compose project. The fixture uses host networking to reach loopback.
+The normal deployment uses the Compose network.
 
-Il test verifica il vero client dell'immagine fissata, l'header letto da file,
-`initialize`, una richiesta `tools/list` proveniente dal control plane simulato,
-la precedenza dell'header inoltrato, gli errori 401, la separazione delle chiavi,
-assenza delle credenziali fittizie nei log, TLS, riavvio e ricreazione da file.
-Non simula una sessione utente ChatGPT né costituisce un collaudo sui dati reali.
+The integration test checks file-backed headers, MCP initialization, and
+`tools/list` through a simulated control plane. It covers header precedence,
+HTTP 401, credential separation, TLS rejection, health, restart, and
+recreation from local files. Tests use isolated credentials and remove the
+temporary containers. Run one integration test at a time per host.
 
-Per versionare su Forgejo: creare un repository indipendente e revisionare i
-file prima del primo commit. `.gitignore` esclude tutti i file privati noti;
-verificare comunque con `git status --short` e `git diff --cached`. Non usare
-`git add -f` sui file locali. Nessun remote o push viene configurato automaticamente.
+Review staged files before pushing. Use `git status --short` and
+`git diff --cached` to check that local configuration and credentials are
+excluded. Keep Forgejo as `origin` and use a separate `github` remote for
+the GitHub copy.

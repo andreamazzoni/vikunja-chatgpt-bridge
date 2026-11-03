@@ -1,69 +1,70 @@
-# Operazioni
+# Operations
 
-## Gestione, aggiornamento e ripristino
+Use `python3 scripts/bridge.py status` for container state and the last saved
+probe. Run `python3 scripts/bridge.py probe` for a fresh MCP handshake and
+catalog. Add `--json` to either command for structured output.
 
-| Operazione | Comando |
+| Operation | Command |
 | --- | --- |
-| Stato | `docker compose ps` |
-| Salute con polling recente | `docker compose exec -T tunnel-client /bin/sh /opt/bridge/healthcheck.sh` |
-| Arresto, conservando il container | `docker compose stop` |
-| Riavvio processo | `docker compose restart` |
-| Arresto e rimozione container/rete del progetto | `docker compose down` |
-| Nuovo avvio | `docker compose up -d --wait --wait-timeout 180` |
-| Verificare il binario fissato | `docker compose exec -T tunnel-client /usr/bin/tunnel-client --version` |
-| Diagnostica locale aggiuntiva | `docker compose exec -T tunnel-client /usr/bin/tunnel-client doctor --control-plane.api-key=file:/run/secrets/openai_api_key --explain` |
+| Stop | `python3 scripts/bridge.py stop` |
+| Start after checking for other clients on the tunnel | `python3 scripts/bridge.py start --single-instance-confirmed` |
+| Recreate and wait for health | `python3 scripts/bridge.py restart` |
+| Inspect deployment health | `docker compose exec -T tunnel-client /bin/sh /opt/bridge/healthcheck.sh` |
+| Check the running binary version | `docker compose exec -T tunnel-client /usr/bin/tunnel-client --version` |
+| Run client diagnostics | `docker compose exec -T tunnel-client /usr/bin/tunnel-client doctor --control-plane.api-key=file:/run/secrets/openai_api_key --explain` |
 
-`doctor` può contattare i servizi configurati e inizializzare MCP; non sostituisce
-il test ChatGPT. Evitare il debug HTTP grezzo e non esportare indiscriminatamente
-log o diagnostica. I normali log sono limitati a 3 file da 10 MiB; possono
-contenere indirizzi e metadati anche se non devono contenere segreti.
+`doctor` can contact the configured services and initialize MCP. The
+ChatGPT call is a separate end-to-end test. Keep raw HTTP tracing disabled
+and review diagnostics before sharing them. Docker retains three log files
+of up to 10 MiB each.
 
-Il pin predefinito è in `compose.yaml` e `versions.lock.json`. Prima di
-cambiare versione verificare i manifesti ARM64 e AMD64 e ripetere i test del
-client candidato. [Release ufficiali](https://github.com/openai/tunnel-client/releases)
+## Update and rollback
 
-`bridge.py update --image IMMAGINE_FISSATA` accetta l'immagine ufficiale con tag
-di versione e digest. Senza `--image` usa il pin del checkout. Il comando
-scarica il candidato, ricrea il container e salva la selezione in `.env`
-dopo il controllo di salute. Se la prova fallisce tenta di riavviare l'immagine
-precedente. `bridge.py rollback` usa l'immagine annotata in
-`.local/rollback.json`. I due comandi richiedono un bridge in esecuzione.
+The default pin is recorded in `compose.yaml` and `versions.lock.json`.
+Check the ARM64 and AMD64 manifests and test the candidate before changing
+the pin. [Official releases](https://github.com/openai/tunnel-client/releases)
 
-Il rollback dell'immagine usa la configurazione locale corrente. Per
-ripristinare anche codice o configurazione recuperare la revisione Git e il
-backup corrispondenti. Per migrare, fermare l'istanza precedente, trasferire in
-modo sicuro `.env`, `secrets/` e `config/local/` e verificare UID/GID e TLS.
+Run `python3 scripts/bridge.py update --image PINNED_IMAGE` with the official
+image reference including its version and digest. Omitting `--image` selects
+the checkout pin. Update pulls the candidate, recreates the container, and
+saves the image selection to `.env` after a successful health check. If
+startup fails, it attempts to restore the running image.
 
-`bridge.py reset` richiede di digitare `RESET` in un terminale locale.
-Rimuove container, rete e configurazione locale, comprese le copie dei segreti
-in quelle directory. Revocare separatamente le credenziali nei rispettivi portali.
+`python3 scripts/bridge.py rollback` uses the previous image in
+`.local/rollback.json`. Both commands require a running bridge. Rollback
+uses the current local configuration. Restore matching Git revisions and
+backups separately when reverting configuration or code.
 
-Conservare questi file in un backup **cifrato fuori dal checkout**, con accesso
-ristretto; non creare archivi contenenti segreti dentro Git o nel contesto Docker.
-Non ci sono dati task da ripristinare qui: rimangono in Vikunja. La rimozione
-dell'app ChatGPT o del container non revoca token Vikunja o chiavi OpenAI.
+## Migration and reset
+
+Stop the previous instance before migrating. Transfer `.env`, `secrets/`,
+and `config/local/` securely, then check UID/GID and TLS on the new host.
+Keep encrypted backups outside the checkout.
+
+Run `python3 scripts/bridge.py reset` in a local terminal and type `RESET`
+to remove the container, network, and local configuration, including any
+credentials in those directories. Revoke credentials separately in their
+respective portals. Vikunja stores the task data.
 
 ## Troubleshooting
 
-| Sintomo | Verifiche |
+| Symptom | What to check |
 | --- | --- |
-| DNS o timeout | Pi e container devono risolvere l'hostname e raggiungere Vikunja; controllare firewall/routing/VLAN e uscita 443 verso OpenAI. Un DNS o `/etc/hosts` valido solo sull'host non basta dentro Docker. Nessun `localhost` per indicare TrueNAS. |
-| Host funziona, container no | Verificare con `doctor` nel container. Se serve, usare un override Compose locale ignorato da Git per DNS o `extra_hosts`, mantenendo hostname e certificato coerenti. Non usare `network_mode: host` come correzione predefinita. |
-| Errore TLS | Controllare orologio del Pi, SAN/hostname, scadenza e catena completa; per CA privata fornire il PEM verificato. Non usare `curl -k`, `InsecureSkipVerify` o HTTP con Bearer. |
-| HTTP 301/302/307/308 | Copiare l'endpoint HTTPS finale da Impostazioni MCP. Evitare redirect, login web intermedio o autenticazione aggiuntiva del reverse proxy; non inviare il token al login. |
-| MCP 404 o assenza scheda MCP | Verificare backend 2.7.0+, percorso `/api/v2/mcp` e routing esistente. Un 404 non giustifica installare un altro server MCP. |
-| MCP 401 | Token scaduto/revocato, file vuoto o senza `Bearer `, permesso MCP Access mancante. Verificare tramite setup senza stampare il file. ChatGPT deve usare No Authentication: un Authorization inoltrato prevale sul valore statico. |
-| MCP 403 o errore JSON-RPC di permessi | Controllare diritti del token e accesso dell'utente al progetto. Read only nega le scritture; non aumentare i permessi per fare passare un test di lettura. |
-| Tunnel 401/403 | Problema distinto dal token Vikunja: chiave runtime, organizzazione, associazioni e Tunnels Read + Use. Controllare il contesto `org-…`. |
-| Tunnel invisibile in ChatGPT | Associare il workspace corretto e verificare i permessi dell'operatore e le policy per app personalizzate. La configurazione del solo Platform project non basta. |
-| Container unhealthy | Eseguire lo script `healthcheck.sh` nel container e usare `doctor` per la diagnostica. Il primo polling può richiedere tempo. Verificare entrambi i collegamenti senza aumentare i timeout alla cieca. |
-| `startup catalog pending` / `oauth discovery pending` | Verificare `CONTROL_PLANE_POLL_CHANNELS=main` nel Compose e ricreare il container con `docker compose up -d --force-recreate`. Le pagine HTML 200 sulle URL OAuth bloccano il polling non limitato in 0.0.19. Il controllo globale `/readyz` può restare negativo; usare lo script di salute del progetto, che richiede probe MCP riuscito e polling recente. |
-| Healthy ma strumenti assenti/non utilizzabili | Ripetere `check.py mcp`, controllare il catalogo reale, autenticazione e permessi; usare Refresh nell'app ChatGPT e una nuova conversazione. Non presumere che ogni tool esposto sia autorizzato. |
-| Token nuovo non usato | Il client risolve il file all'avvio; un bind mount può conservare il vecchio inode. Usare `down`, setup e `up`, non il solo `restart`. |
-| Permission denied sui secrets | Verificare proprietario, modi 0700/0600, BRIDGE_UID/GID e assenza di rimappatura UID; non rendere i token leggibili a tutti. |
+| DNS or timeout | The host and container must resolve and reach Vikunja. Check routing, firewall rules, and HTTPS access to OpenAI. Use a hostname reachable from the container. |
+| Host works, container fails | Use `doctor` and check Docker DNS. A Git-ignored Compose override can configure DNS or `extra_hosts`. Preserve the TLS hostname. |
+| TLS error | Verify the host clock, hostname/SAN, expiry, and certificate chain. For a private CA, provide its verified public PEM file in setup. |
+| HTTP redirect | Use the final HTTPS MCP endpoint from Vikunja Settings. Verify that the route accepts MCP requests directly. |
+| MCP 404 or missing settings | Check Vikunja 2.7.0+, the `/api/v2/mcp` path, and reverse-proxy routing. |
+| MCP 401 | Check expiry, revocation, the `Bearer ` prefix, and MCP Access. Select **No Authentication** in ChatGPT so the client supplies the local authorization header. |
+| MCP 403 or permission error | Check the token scope and the user's project access. The Read only preset blocks writes. |
+| Tunnel 401 or 403 | Check the runtime key, organization ID, workspace association, and Tunnels Read + Use. |
+| Tunnel missing in ChatGPT | Check the target workspace and its policies for custom apps. |
+| Container unhealthy | Run the deployment health script and inspect client diagnostics. Check MCP initialization and successful control-plane polling separately. |
+| OAuth discovery pending | Check that Compose sets `CONTROL_PLANE_POLL_CHANNELS=main` and recreate the container. The deployment uses its own health script because upstream `/readyz` can stay pending when OAuth discovery returns HTML. |
+| Healthy, but tools missing | Repeat the probe, check permissions, refresh the app's tool catalog, and try a new chat. |
+| Token rotation ignored | Use `docker compose down`, setup, and start. Recreating the container remounts replaced secret files. |
+| Secret mount denied | Check file ownership, modes 0700/0600, BRIDGE_UID/GID, and Docker UID remapping. |
 
-Con Nginx Proxy Manager o un altro reverse proxy, verificare che il routing
-esistente inoltri Authorization e supporti POST/SSE senza buffering incompatibile.
-Anche il collegamento proxy → Vikunja deve essere valutato: un HTTPS valido dal
-Pi al proxy **non dimostra** che il successivo tratto sia cifrato. Non modificare
-automaticamente il proxy o aggirare problemi spegnendo TLS.
+For reverse-proxy deployments, verify that the existing route preserves
+Authorization and supports POST and SSE. Check TLS separately on the
+proxy-to-Vikunja connection.

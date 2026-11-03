@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gestione del bridge Vikunja tramite Docker Compose."""
+"""Manage the Vikunja bridge with Docker Compose."""
 import argparse
 import fcntl
 import json
@@ -47,7 +47,7 @@ def check_checkout(ids):
                         '{{index .Config.Labels "com.docker.compose.project.working_dir"}}',
                         cid], capture=True).stdout.strip()
         if checkout != str(ROOT):
-            raise ConfigError("Il progetto Compose è già in uso da un altro checkout")
+            raise ConfigError("Another checkout already uses this Compose project")
 
 
 def check_local(*args, capture=False, check=True):
@@ -74,7 +74,7 @@ def selected_image():
 
 def require_pinned(image):
     if not re.fullmatch(r"ghcr\.io/openai/tunnel-client:v[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}", image):
-        raise ConfigError("Indicare l'immagine ufficiale con versione e digest")
+        raise ConfigError("Provide the official image with a version tag and digest")
     return image
 
 
@@ -105,11 +105,11 @@ def report(command, as_json):
     elif command == "probe":
         print(f"MCP: {data['mcp_connection']}")
         if "tools" in data:
-            print(f"Strumenti disponibili ({data['tool_count']}): " + ", ".join(data["tools"]))
+            print(f"Available tools ({data['tool_count']}): " + ", ".join(data["tools"]))
     else:
-        print(f"Container: {data['state']} ({data['health'] or 'salute non disponibile'})")
+        print(f"Container: {data['state']} ({data['health'] or 'health unavailable'})")
         last = data["last_probe"]
-        print("Ultima verifica MCP: " + (last["mcp_connection"] if last else "eseguire bridge.py probe"))
+        print("Last MCP probe: " + (last["mcp_connection"] if last else "run bridge.py probe"))
     return int(command == "probe" and data["mcp_connection"] != "ok")
 
 
@@ -119,22 +119,22 @@ def main():
                         "start", "stop", "status", "probe", "restart", "update", "rollback"])
     parser.add_argument("--single-instance-confirmed", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--image", help="Immagine ufficiale fissata per update")
+    parser.add_argument("--image", help="Pinned official image for update")
     args = parser.parse_args()
     cmd = args.command
     if args.json and cmd not in ("status", "probe"):
-        parser.error("--json è disponibile per status e probe")
+        parser.error("--json is available for status and probe")
     if args.image and cmd != "update":
-        parser.error("--image è disponibile per update")
+        parser.error("--image is available for update")
     if args.single_instance_confirmed and cmd != "start":
-        parser.error("--single-instance-confirmed è disponibile per start")
+        parser.error("--single-instance-confirmed is available for start")
     private_dir(LOCAL)
     with (LOCAL / "operation.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if cmd in ("status", "probe"):
             if cmd == "status" and not (ROOT / ".env").exists():
                 data = {"state": "unconfigured", "health": None, "last_probe": None}
-                print(json.dumps(data) if args.json else "Bridge da configurare con install")
+                print(json.dumps(data) if args.json else "Run install to configure the bridge")
                 return 0
             return report(cmd, args.json)
         if cmd == "build":
@@ -147,28 +147,28 @@ def main():
         check_checkout(ids)
         if cmd == "install":
             if ids or not sys.stdin.isatty() or os.getuid() == 0:
-                raise ConfigError("Install richiede un terminale locale non root e nessun container esistente")
+                raise ConfigError("Install requires a local non-root terminal and no existing container")
             run(["docker", "pull", require_pinned(selected_image())])
             run([sys.executable, str(ROOT / "scripts/setup.py")])
             validate()
-            if input("Hai verificato che nessun altro client usa il tunnel? Digita yes per avviare: ").strip() == "yes":
+            if input("Have you checked that no other client uses this tunnel? Type yes to start: ").strip() == "yes":
                 start()
         elif cmd == "start":
             if not args.single_instance_confirmed:
-                parser.error("Verificare gli altri client e passare --single-instance-confirmed")
+                parser.error("Check for other clients and pass --single-instance-confirmed")
             validate()
             start()
         elif cmd == "stop":
             compose("stop", SERVICE)
         elif cmd == "restart":
             if not ids:
-                raise ConfigError("Nessun container. Usare start dopo aver verificato il tunnel")
+                raise ConfigError("No container found. Check the tunnel and run start")
             start(recreate=True)
         elif cmd in ("update", "rollback"):
             record = LOCAL / "rollback.json"
             running = compose("ps", "-q", SERVICE, capture=True).stdout.split()
             if len(running) != 1:
-                raise ConfigError("Avviare una sola istanza del bridge prima di cambiare immagine")
+                raise ConfigError("Start a single bridge instance before changing images")
             current = require_pinned(run(["docker", "inspect", "--format", "{{.Config.Image}}",
                                           running[0]], capture=True).stdout.strip())
             candidate = require_pinned(
@@ -176,7 +176,7 @@ def main():
                 PIN if cmd == "update" else json.loads(record.read_text())["image"]
             )
             if candidate == current:
-                raise ConfigError("L'immagine selezionata è già in uso")
+                raise ConfigError("The selected image is already in use")
             validate()
             run(["docker", "pull", candidate])
             previous_record = record.read_text() if record.exists() else None
@@ -196,14 +196,14 @@ def main():
             targets = [ROOT / "config/local", ROOT / "secrets", ROOT / ".env"]
             if not sys.stdin.isatty() or os.getuid() == 0 or any(
                     p.is_symlink() for p in [ROOT / "config", *targets]):
-                raise ConfigError("Reset richiede un terminale locale non root e percorsi senza symlink")
-            print(f"Reset di {ROOT}: rimuove container, rete, .env, config/local e secrets.")
-            if input("Digita RESET per eliminare la configurazione e le credenziali locali: ").strip() != "RESET":
+                raise ConfigError("Reset requires a local non-root terminal and paths without symlinks")
+            print(f"Reset of {ROOT} removes the container, network, .env, config/local, and secrets.")
+            if input("Type RESET to remove local configuration and credentials: ").strip() != "RESET":
                 return 0
             if (ROOT / ".env").exists() or ids:
                 compose("down")
             if containers():
-                raise ConfigError("Container ancora presenti. I file locali sono conservati")
+                raise ConfigError("Containers remain. Local files were preserved")
             for path in targets:
                 if path.is_dir():
                     shutil.rmtree(path)
@@ -219,5 +219,5 @@ if __name__ == "__main__":
         sys.exit(main())
     except (ConfigError, OSError, ValueError, KeyError, subprocess.CalledProcessError, KeyboardInterrupt, EOFError) as exc:
         print(str(exc) if isinstance(exc, ConfigError) else
-              "Operazione interrotta. Controllare configurazione, Docker e stato del bridge.", file=sys.stderr)
+              "Operation interrupted. Check the configuration, Docker, and bridge status.", file=sys.stderr)
         sys.exit(1)

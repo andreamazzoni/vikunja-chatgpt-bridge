@@ -19,48 +19,48 @@ def prompt(label, previous=""):
 
 def main():
     if not sys.stdin.isatty() or not sys.stderr.isatty() or os.getuid() == 0:
-        raise ConfigError("Eseguire come utente non root in un terminale interattivo privato")
+        raise ConfigError("Run as a non-root user in a private interactive terminal")
     # Stop before touching a mounted file. Include exited containers retaining mounts.
     result = subprocess.run(["docker", "ps", "-aq", "--filter",
                              "label=com.docker.compose.project=vikunja-chatgpt-bridge"],
                             capture_output=True, text=True, check=True)
     if result.stdout.strip():
-        raise ConfigError("Rimuovere prima i container di questo progetto con docker compose down; poi ripetere setup")
+        raise ConfigError("Remove the project containers with docker compose down, then rerun setup")
     cfg = read_env() if (ROOT / ".env").exists() else {}
-    url = prompt("URL HTTPS MCP completo", cfg.get("VIKUNJA_MCP_URL", "https://vikunja.example.invalid/api/v2/mcp"))
+    url = prompt("Complete HTTPS MCP URL", cfg.get("VIKUNJA_MCP_URL", "https://vikunja.example.invalid/api/v2/mcp"))
     validate_url(url)
-    tunnel = validate_tunnel(prompt("Nuovo ID tunnel dedicato a Vikunja", cfg.get("OPENAI_TUNNEL_ID", "")))
-    org = prompt("Organization ID opzionale ( - per cancellare)", cfg.get("OPENAI_ORGANIZATION_ID", ""))
+    tunnel = validate_tunnel(prompt("Dedicated Vikunja tunnel ID", cfg.get("OPENAI_TUNNEL_ID", "")))
+    org = prompt("Optional organization ID (enter - to clear)", cfg.get("OPENAI_ORGANIZATION_ID", ""))
     org = "" if org == "-" else org
     if org and not re.fullmatch(r"org-[A-Za-z0-9_-]+", org):
-        raise ConfigError("Organization ID non valido")
+        raise ConfigError("Invalid organization ID")
     local = ROOT / "config/local"
     private_dir(local)
     private_dir(ROOT / "secrets")
     previous_ca = cfg.get("BRIDGE_CA_FILE", "") == "/etc/vikunja-bridge/ca.pem"
-    ca = prompt("CA PEM verificata: percorso, - per CA di sistema, invio per mantenere", "" )
+    ca = prompt("Verified CA PEM path (enter - for system CAs, Enter to keep current)", "" )
     custom_ca = previous_ca and ca != "-"
     if ca and ca != "-":
         pem = Path(ca).expanduser().read_text()
         if "PRIVATE KEY" in pem:
-            raise ConfigError("La CA deve contenere solo certificati pubblici")
+            raise ConfigError("The CA file must contain public certificates only")
         ssl.create_default_context(cadata=pem)
         write_private(local / "ca.pem", pem)
         custom_ca = True
     # getpass must not fall back to visible input.
     warnings.simplefilter("error", getpass.GetPassWarning)
     for name, label, prefix in [
-        ("openai_api_key", "Chiave runtime OpenAI (non admin)", ""),
-        ("vikunja_authorization", "Token MCP Vikunja, senza Bearer", "Bearer "),
+        ("openai_api_key", "OpenAI runtime API key (non admin)", ""),
+        ("vikunja_authorization", "Vikunja MCP token without the Bearer prefix", "Bearer "),
     ]:
         path = ROOT / "secrets" / name
-        suffix = " (invio mantiene quello esistente)" if path.exists() else ""
+        suffix = " (Enter keeps the existing value)" if path.exists() else ""
         value = getpass.getpass(label + suffix + ": ")
         if not value and path.exists():
             continue
         check_secret(value)
         if prefix and value.startswith("Bearer"):
-            raise ConfigError("Inserire solo il token, senza prefisso Bearer")
+            raise ConfigError("Enter the token without the Bearer prefix")
         write_private(path, prefix + value + "\n")
     values = {
         "BRIDGE_UID": str(os.getuid()), "BRIDGE_GID": str(os.getgid()),
@@ -70,10 +70,10 @@ def main():
     }
     if cfg.get("BRIDGE_IMAGE"):
         values["BRIDGE_IMAGE"] = cfg["BRIDGE_IMAGE"]
-    write_private(ROOT / ".env", "# Configurazione locale, senza segreti\n" +
+    write_private(ROOT / ".env", "# Local configuration without credentials\n" +
                   "".join(f"{key}={value}\n" for key, value in values.items()))
-    print("Configurazione salvata (segreti 0600). Nessun servizio avviato.")
-    print("Proseguire con: docker compose config --quiet; python3 scripts/check.py config")
+    print("Configuration saved. Credential files use mode 0600.")
+    print("Run python3 scripts/bridge.py validate to check the configuration")
 
 
 if __name__ == "__main__":
@@ -81,5 +81,5 @@ if __name__ == "__main__":
         main()
     except (ConfigError, OSError, ValueError, ssl.SSLError, subprocess.CalledProcessError,
             getpass.GetPassWarning, EOFError, KeyboardInterrupt) as exc:
-        print(str(exc) if isinstance(exc, ConfigError) else "Setup interrotto; controllare Docker, file e CA locali", file=sys.stderr)
+        print(str(exc) if isinstance(exc, ConfigError) else "Setup interrupted. Check Docker, local files, and CA settings", file=sys.stderr)
         sys.exit(1)

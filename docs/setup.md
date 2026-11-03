@@ -1,208 +1,160 @@
-# Configurazione e collegamento a ChatGPT
+# Setup and ChatGPT connection
 
-Usare `python3 scripts/bridge.py install` per il primo avvio guidato.
-Le sezioni seguenti documentano anche la procedura manuale.
+Run `python3 scripts/bridge.py install` for guided installation once you
+have a Vikunja token, tunnel ID, and OpenAI runtime key. Use one active client
+per tunnel ID.
 
-## 1. Verificare Vikunja e creare il token
+## 1. Check Vikunja and create a token
 
-Controllare la versione nell'interfaccia Vikunja, nei dettagli dell'app installata
-su TrueNAS o con una richiesta pubblica, senza token:
+Check the backend version in Vikunja, in the installed TrueNAS app details,
+or through the public info endpoint:
 
 ```sh
 curl --fail --silent --show-error https://vikunja.example.net/api/v1/info
 ```
 
-Verificare il campo `version` del backend: il numero di pacchetto del catalogo
-TrueNAS è distinto dalla versione Vikunja. Sono richiesti almeno **2.7.0** e la
-scheda **Impostazioni → MCP**. Se la versione è precedente, fermarsi e pianificare
-separatamente l'aggiornamento dell'app; questo progetto non lo esegue.
+Use the response's `version` field. TrueNAS catalog package versions are
+separate from Vikunja backend versions. Vikunja **2.7.0+** exposes **Settings →
+MCP**. Upgrade Vikunja separately if the backend predates this feature.
 
-In Vikunja:
+1. Open **Settings → MCP** from the Vikunja user menu.
+2. Create a token named, for example, `ChatGPT Vikunja read only`.
+3. Select **Read only** explicitly. The default preset grants write access.
+4. Keep **MCP → Access** and the required read permissions. Set an expiry.
+5. Save the endpoint and enter the token at the hidden setup prompt. Vikunja
+   shows the token value once.
 
-1. Aprire il menu utente → **Settings / Impostazioni → MCP**.
-2. Creare un token con nome riconoscibile, per esempio `ChatGPT Vikunja lettura`.
-3. Selezionare esplicitamente **Read only**. Il preset predefinito permette anche
-   scritture, quindi controllare la selezione prima di confermare.
-4. Mantenere **MCP → Access**, necessario per ogni connessione, e solo i permessi
-   di lettura necessari. Impostare una scadenza adeguata.
-5. Annotare l'endpoint mostrato dalla pagina e copiare il token solo nel prompt
-   nascosto di setup. Il valore viene mostrato una sola volta.
+The token inherits the user's project access. A dedicated account with access
+to the required projects can narrow the scope further.
 
-Il token rispetta anche l'accesso ai progetti dell'utente che lo crea. Per isolare
-ulteriormente i dati, usare un account dedicato con accesso soltanto ai progetti
-necessari. Non presumere che il nome del token limiti i progetti.
+To enable writes later, create a new token with the specific permissions or
+review the **Typed tools read + write** preset. Remove the bridge container
+with `docker compose down`, run setup with the replacement token, and start
+the bridge. Verify access, revoke the old token in Vikunja, and refresh the
+ChatGPT tool catalog.
 
-Per abilitare scritture in un secondo momento, creare un **nuovo token** con i
-singoli permessi richiesti o il preset **Typed tools read + write**, rivedendone
-l'elenco. Evitare Full access come soluzione a un errore di autorizzazione.
-Fermare e rimuovere il container di questo progetto, rilanciare setup, sostituire
-il token Vikunja e ricreare il container; verificare il nuovo accesso, poi revocare
-il vecchio token da Vikunja. Aggiornare il catalogo degli strumenti in ChatGPT.
+## 2. Create the tunnel
 
-## 2. Creare il tunnel e associarlo al workspace
+1. Open the tunnel settings for the intended Platform organization. Create a
+   dedicated tunnel and copy its complete `tunnel_id`.
+2. Associate it with the Platform organization and the **target ChatGPT
+   workspace**. The target workspace association controls visibility in ChatGPT.
+3. Create an organization runtime API key with **Tunnels Read + Use**. Use
+   that key for the client process. Creating or editing a tunnel requires
+   **Read + Manage**.
+4. Save the optional `org-…` ID if required. Organization administrators can
+   manage permissions in Roles or Groups. Allow time for changes to propagate.
 
-Seguire la [guida Secure MCP Tunnel ufficiale](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
-e l'[onboarding del client fissato](https://github.com/openai/tunnel-client/blob/v0.0.19/docs/onboarding.md).
+Portal access, key creation, and workspace association are manual. Contact
+OpenAI support if an enterprise workspace association cannot be verified.
+The bridge uses local static Bearer authentication for Vikunja.
 
-1. Aprire [Platform → Organization → Tunnels](https://platform.openai.com/settings/organization/tunnels)
-   nell'organizzazione corretta. Creare un tunnel dedicato, chiamato per esempio
-   `vikunja-chatgpt-bridge`; copiare il `tunnel_id` completo.
-2. Associare il tunnel sia all'organizzazione Platform che lo gestisce sia al
-   **workspace ChatGPT di destinazione**. La sola associazione all'organizzazione
-   Platform non garantisce che ChatGPT lo elenchi. Usare le opzioni offerte dal
-   portale; per associazioni enterprise non verificabili serve l'assistenza OpenAI.
-3. Creare una chiave nelle [Runtime API keys dell'organizzazione](https://platform.openai.com/settings/organization/api-keys).
-   Non utilizzare una chiave admin per il processo permanente. Il principal della
-   chiave deve avere **Tunnels Read + Use** per quel contesto.
-4. La creazione/modifica del tunnel richiede invece **Read + Manage**. I ruoli
-   sono a livello organizzazione, separati dai permessi di progetto e dalle
-   autorizzazioni ChatGPT. L'amministratore può gestirli in Roles / Groups.
-5. Se richiesto dal contesto dell'organizzazione, conservare anche l'ID `org-…`
-   per il setup. Attendere la propagazione dei ruoli prima di riprovare.
+[Platform tunnel settings](https://platform.openai.com/settings/organization/tunnels) ·
+[Runtime API keys](https://platform.openai.com/settings/organization/api-keys) ·
+[Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) ·
+[Client onboarding](https://github.com/openai/tunnel-client/blob/v0.0.19/docs/onboarding.md)
 
-Login, creazione chiave, associazioni e conferme del portale sono passaggi manuali.
-Il progetto non automatizza il browser né crea tunnel usando credenziali del
-bridge TrueNAS. Non è necessario configurare OAuth in Vikunja per questa
-architettura con credenziale statica locale.
+## 3. Configure the host
 
-## 3. Configurare localmente, senza token in chat
-
-Nel terminale privato del Raspberry Pi, come utente con accesso a Docker:
+Use a private terminal as the non-root user who operates Docker. For manual
+setup, run:
 
 ```sh
 python3 scripts/setup.py
-docker compose config --quiet
-python3 scripts/check.py config
-python3 scripts/check.py tls
-docker compose pull
+python3 scripts/bridge.py validate
+python3 scripts/bridge.py build
 ```
 
-Il setup chiede URL MCP completo, tunnel ID, organization ID opzionale e i due
-segreti con input nascosto. Per Vikunja inserire **solo il token**: il programma
-aggiunge `Bearer `. Non eseguire il setup tramite una chat o un terminale che
-registra l'input. Non usare `set -x`, token negli argomenti shell, `echo TOKEN`,
-variabili in `.env`, screenshot o copie dei segreti nel repository.
+Setup asks for the MCP URL, tunnel ID, optional organization ID, and both
+credentials. Enter the bare Vikunja token. Setup adds `Bearer `. Keep secret
+values out of shell arguments, shell traces, chat, screenshots, and the checkout
+apart from the designated secret files.
 
-Il setup non avvia nulla e non accede ai task. Rifiuta di modificare file quando
-esistono container di questo progetto, anche arrestati: prima usare
-`docker compose down`. Al nuovo avvio Compose rimonta i file aggiornati.
-Invio mantiene i segreti esistenti; non li mostra. Un setup interrotto può aver
-salvato parte dei file: ripeterlo prima di avviare il servizio.
+Remove existing project containers with `docker compose down` before running
+setup again. This lets Compose mount the updated files on the next start.
+Press Enter at an existing credential prompt to retain its value. If setup
+is interrupted, finish it before starting the service.
 
-| File locale ignorato da Git | Contenuto |
+| Git-ignored path | Contents |
 | --- | --- |
-| `.env` | URL, tunnel/org ID, UID/GID dell'operatore e percorso CA; nessun token |
-| `secrets/openai_api_key` | Solo chiave runtime OpenAI |
-| `secrets/vikunja_authorization` | Valore completo `Bearer …` |
-| `config/local/ca.pem` | CA pubblica opzionale; nessuna chiave privata |
+| `.env` | URL, tunnel and organization IDs, UID/GID, CA path, and optional image pin |
+| `secrets/openai_api_key` | OpenAI runtime API key |
+| `secrets/vikunja_authorization` | Complete `Bearer …` value |
+| `config/local/ca.pem` | Optional public CA certificate |
 
-Directory locali 0700 e file 0600; il container usa UID/GID dell'operatore.
-I secrets Compose sono file montati in sola lettura, **non cifrati a riposo**.
-Non impostare `uid`/`gid` sui secrets pensando che Compose rimappi la proprietà
-dei file. Docker rootless/user namespace remapping richiede una verifica separata
-dei permessi; non è incluso nel collaudo.
+Private directories use mode 0700 and files use mode 0600. Compose mounts
+the secret files read-only and runs with the operator's UID/GID. The files
+remain plaintext at rest. Rootless Docker and user namespace remapping
+require a separate permissions check.
 
-Per un certificato pubblico valido lasciare vuota la richiesta CA. Per una CA
-privata, ottenere il certificato pubblico da un canale amministrativo affidabile,
-verificarne fingerprint e nome/SAN, poi indicare il file PEM nel setup. Il client
-usa `SSL_CERT_FILE`; le CA della distribuzione rimangono disponibili nella
-directory di sistema. Con CA di sistema il probe Python usa le CA dell'host:
-host e container possono avere trust store diversi. Se serve tornare alle CA di
-sistema, rispondere `-`. Non disabilitare mai la verifica TLS o il nome del server.
+For a publicly trusted certificate, use the default CA setting. For a private
+CA, obtain its public PEM certificate through a trusted administrative
+channel. Verify the fingerprint and server name before selecting the PEM
+in setup. The client uses `SSL_CERT_FILE` and can also load CA certificates
+from the system directory. The Python host probe uses the host's trust store
+with the default CA setting. Enter `-` in setup to restore that setting.
+Keep TLS certificate and hostname verification enabled.
 
-## 4. Verificare MCP e avviare
-
-Quando è presente il token Vikunja, eseguire:
+## 4. Probe MCP and start
 
 ```sh
-python3 scripts/check.py mcp
+python3 scripts/bridge.py probe
+python3 scripts/bridge.py start --single-instance-confirmed
+python3 scripts/bridge.py status
 ```
 
-Questo controllo dall'**host** invia solo `initialize`,
-`notifications/initialized` e `tools/list`, inclusa la paginazione. Non invia
-`tools/call`, non legge task e non modifica dati. Stampa solo conteggio e nomi
-degli strumenti, mai token, descrizioni, risposte grezze o corpi degli errori.
-Rifiuta redirect per proteggere il Bearer. Supporta risposte JSON e SSE.
+Before using the start flag, verify that any previous client on this tunnel
+has stopped. The host probe uses `initialize`, `notifications/initialized`,
+and paginated `tools/list`. It accepts JSON and SSE, rejects redirects, and
+prints tool names and counts only. The image already runs `tunnel-client run`
+as its entrypoint and resolves both credentials from files.
 
-Controllare che non ci siano altri client che usano questo tunnel ID, quindi:
+Container health requires liveness, a successful initial MCP probe, and a
+successful control-plane poll within 120 seconds. The read-only health script
+uses `/healthz`, `/health/mcp`, and `/metrics`. A successful health check exits
+silently. Repeat the MCP probe for a fresh local connection test and run a
+read from ChatGPT to verify the full path.
 
-```sh
-docker compose up -d --wait --wait-timeout 180
-docker compose ps
-docker compose exec -T tunnel-client /bin/sh /opt/bridge/healthcheck.sh
-```
+`CONTROL_PLANE_POLL_CHANNELS=main` scopes polling to Vikunja. This matters
+when OAuth discovery URLs return frontend HTML with HTTP 200. Unscoped
+polling in 0.0.19 waits for the OAuth catalog in that case. Background
+discovery can still log warnings and report `oauth discovery pending` in
+upstream `/readyz`. The deployment health check measures the main channel
+separately. Review the polling scope and health criteria before adding OAuth.
 
-Il client legge nativamente entrambi i segreti da file. L'immagine esegue già
-`tunnel-client run` come entrypoint: non aggiungere un secondo `run` al command.
-Non viene compilato o eseguito un server MCP locale; l'MCP rimane quello di Vikunja.
+`restart: unless-stopped` restarts a terminated process and resumes the
+container when Docker starts, unless the operator stopped it. Docker reports
+`unhealthy` separately. The client retries control-plane connections itself.
 
-Il controllo di salute è uno script shell montato in sola lettura. Usa le
-superfici ufficiali `/healthz`, `/health/mcp` e `/metrics`: richiede processo vivo,
-probe MCP iniziale **riuscito** e un polling riuscito negli ultimi 120 secondi.
-Non chiama strumenti e non prova l'accesso Vikunja continuativo, una chiamata
-ChatGPT riuscita o i permessi per una specifica lettura. Ripetere il probe MCP
-e il collaudo ChatGPT quando serve. Lo script non stampa nulla se riesce;
-Compose ne interpreta il codice di uscita.
+## 5. Connect the custom app in ChatGPT
 
-Il polling è limitato ufficialmente a **`CONTROL_PLANE_POLL_CHANNELS=main`**:
-si usa soltanto l'MCP Vikunja, senza canale Harpoon. Questa scelta è necessaria
-quando le URL `/.well-known/oauth-protected-resource…` restituiscono la pagina
-HTML del frontend con HTTP 200. In 0.0.19 il polling non limitato aspetterebbe
-indefinitamente il catalogo OAuth. Vikunja qui usa un Bearer statico e non
-fornisce quel catalogo. Nessuna modifica a Vikunja o al reverse proxy è richiesta.
+Keep the client running during discovery. Labels and access depend on the
+account and workspace policy.
 
-La discovery OAuth continua in background e può produrre warning. Il controllo
-globale upstream `tunnel-client health` e `/readyz` rimangono negativi con
-`oauth discovery pending` in questo caso: **non sono il controllo di salute
-di questo deployment**. La salute del canale usato è verificata separatamente;
-non si finge che OAuth sia configurato. Questa modalità è collaudata anche con
-HTML 200 nelle fixture. Una futura integrazione OAuth richiederà una revisione
-delle sottoscrizioni e dei controlli.
+1. In the target workspace, open **Plugins / Apps → + → Add custom MCP server**.
+2. Name the app `Vikunja` and describe its access to your self-hosted instance.
+3. Select **Tunnel** as the connection and choose the dedicated tunnel or enter
+   its ID.
+4. Select **No Authentication** in ChatGPT. Tunnel access follows workspace
+   permissions and the client adds the Vikunja token locally. Keep the private
+   Vikunja URL and tokens in the bridge configuration.
+5. Complete the portal prompts, install the app, and inspect the discovered
+   catalog. If the UI requires OAuth, verify the workspace policy before
+   proceeding.
+6. Enable the app in a new chat through the app picker or `@Vikunja`.
 
-`restart: unless-stopped` riavvia il processo se termina e dopo il riavvio di
-Docker/host, salvo arresto esplicito dell'operatore. Lo stato `unhealthy` da solo
-**non** causa un riavvio Docker. Il client ha i propri tentativi di riconnessione;
-non usare un watchdog che possa ripetere operazioni di scrittura.
+This tunnel path supplies Bearer authentication to Vikunja locally. Each new
+deployment needs its own end-to-end acceptance test from ChatGPT.
 
-## 5. Collegare l'app personalizzata a ChatGPT
+For the first test, pick a known project and request a read-only action:
 
-Consultare [Add custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server)
-e [Connect and test your plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt).
-Le etichette della UI e la disponibilità dipendono dall'account e dalle policy del
-workspace; il client deve restare attivo durante la discovery.
+> Use Vikunja to show me the title of this project. Leave all data unchanged.
 
-1. Nel workspace corretto aprire **Plugins / App → + → Add custom MCP server**,
-   con accesso alla modalità sviluppatore/server personalizzati se richiesto.
-2. Nome: `Vikunja`; descrizione: accesso alla propria istanza self-hosted.
-3. In **Connection** scegliere **Tunnel**, poi il tunnel dedicato o il suo ID.
-   Non inserire l'URL privato Vikunja come URL pubblico né incollare token.
-4. Per questa connessione con autenticazione locale scegliere **No Authentication**:
-   ChatGPT non deve inviare un proprio Bearer che sovrascriva quello statico.
-   L'accesso al tunnel rimane protetto da autorizzazioni OpenAI/workspace e Vikunja
-   continua a richiedere il token sul tratto locale.
-5. Completare le conferme di rischio del portale, creare/installare l'app e
-   controllare il catalogo scoperto. Se la UI impone OAuth, fermarsi: non simulare
-   OAuth e non aggiungere proxy senza prima verificare policy e disponibilità.
-6. Abilitare l'app in una nuova conversazione, tramite selezione app o `@Vikunja`.
+Verify the result in the Vikunja UI. Data returned to the chat reaches OpenAI.
+For a write test, first obtain an explicit request and agree on the project,
+title, and content of one test task. Confirm read access with the replacement
+token before creating it. Treat later edits or deletion as separate requests.
 
-La [guida Vikunja](https://vikunja.io/help/mcp/) avverte che il collegamento
-**diretto** ChatGPT → Vikunja non supporta il suo Bearer senza OAuth. Qui si usa
-un percorso diverso: il client del tunnel autentica localmente la richiesta.
-L'iniezione è collaudata con servizi fittizi; l'accettazione end-to-end in ChatGPT
-va ancora verificata nel workspace effettivo. Non dichiarare il plugin attivo
-solo perché la discovery locale o il controllo di salute riescono.
-
-Come primo collaudo concordato chiedere una **lettura circoscritta**, per esempio:
-
-> Usa Vikunja per mostrarmi il titolo del progetto che ti indico. Non creare,
-> modificare o cancellare nulla.
-
-Scegliere esplicitamente un progetto accessibile e uno strumento di lettura fra
-quelli realmente elencati. Le informazioni lette arrivano a OpenAI/ChatGPT.
-Controllare il risultato nell'interfaccia Vikunja.
-
-Solo dopo un'esplicita richiesta dell'operatore, attivare i permessi di scrittura
-e concordare **progetto, titolo e contenuto** di un task di prova. Verificare
-prima la lettura con il nuovo token, poi eseguire una sola creazione. Modifiche o
-cancellazione del task di prova richiedono a loro volta una richiesta esplicita.
-Questo repository non esegue quel test automaticamente.
+[Add a custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server) ·
+[Test a ChatGPT plugin](https://developers.openai.com/plugins/deploy/connect-chatgpt) ·
+[Vikunja MCP guide](https://vikunja.io/help/mcp/)

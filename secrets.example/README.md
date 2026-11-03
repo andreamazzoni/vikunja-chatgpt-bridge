@@ -1,12 +1,14 @@
-Esempi del formato, senza credenziali utilizzabili:
+# Local secret files
 
-| File locale ignorato da Git | Contenuto |
+| Git-ignored file | Contents |
 | --- | --- |
-| `secrets/openai_api_key` | La sola chiave runtime OpenAI |
-| `secrets/vikunja_authorization` | `Bearer ` seguito dal token MCP Vikunja |
+| `secrets/openai_api_key` | The OpenAI runtime API key |
+| `secrets/vikunja_authorization` | `Bearer ` followed by the Vikunja MCP token |
 
-Usare `python3 scripts/setup.py` nel terminale locale: non copiare token in chat,
-argomenti shell o file di esempio. Directory 0700, file 0600, proprietario uguale
-all'utente del container. Compose monta questi file in sola lettura; non li cifra.
-Il prefisso `file:` del client risolve l'intero valore dell'header: non usare
-`Bearer file:/…`, interpolazioni `${TOKEN}` o un inesistente suffisso `_FILE`.
+Run `python3 scripts/setup.py` in a private terminal. Enter secrets only
+at the hidden prompts. The directory uses mode 0700 and the files use mode
+0600. Their owner matches the container user. Compose mounts the files
+read-only. Use encrypted storage if you require encryption at rest.
+
+The client's `file:` reference resolves the entire header value. Put the
+`Bearer ` prefix inside the file, followed by the token.

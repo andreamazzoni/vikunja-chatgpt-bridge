@@ -1,13 +1,12 @@
-# Principi del progetto
+# Project principles
 
-- Allineare struttura, guida operativa e CLI al bridge TrueNAS, adattandole al
-  server MCP integrato di Vikunja e all'immagine ufficiale di tunnel-client.
-- Usare Docker Compose e immagini fissate per versione e digest. Tenere
-  verificato il supporto ARM64 e AMD64.
-- Conservare configurazione privata, segreti e stato locale fuori da Git.
-  Usare input nascosto e mount dei segreti in sola lettura.
-- Mantenere TLS verificato, container non root e diagnostica su loopback.
-- Distinguere stato del container, probe MCP e collaudo dall'app ChatGPT.
-- Usare fixture isolate per i test. Le chiamate di scrittura su dati reali
-  richiedono una richiesta esplicita.
-- Pubblicare il sorgente sul Forgejo indicato dall'operatore.
+- Align the layout, operations guide, and CLI with the TrueNAS bridge. Adapt
+  them to Vikunja's built-in MCP server and the official tunnel-client image.
+- Use Docker Compose and pin images by version and digest. Track ARM64 and
+  AMD64 verification separately.
+- Keep private configuration, credentials, and local state out of Git.
+  Collect credentials with hidden input and mount them read-only.
+- Verify TLS, run as a non-root user, and keep diagnostics on loopback.
+- Distinguish container health, the MCP probe, and acceptance from ChatGPT.
+- Use isolated test fixtures. Writing to real data requires an explicit request.
+- Publish source to the Forgejo repository designated by the operator.
