@@ -1,0 +1,13 @@
+vikunja-chatgpt-bridge
+
+Deployment indipendente per Vikunja e OpenAI Secure MCP Tunnel.
+Questo progetto non è affiliato a OpenAI, Vikunja o TrueNAS.
+
+Il deployment referenzia l'immagine ufficiale openai/tunnel-client 0.0.19:
+https://github.com/openai/tunnel-client
+Copyright 2026 OpenAI; Apache License 2.0, con avvisi e licenze delle dipendenze
+disponibili nel progetto e negli artefatti upstream. Nessun binario upstream
+viene copiato o redistribuito in questo repository.
+
+Vikunja viene utilizzato come servizio già installato; non è incluso nel
+repository o nell'immagine di questo progetto.

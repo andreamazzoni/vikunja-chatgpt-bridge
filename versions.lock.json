@@ -1,0 +1,13 @@
+{
+  "verified_on": "2026-11-02",
+  "tunnel_client": {
+    "version": "0.0.19",
+    "release": "https://github.com/openai/tunnel-client/releases/tag/v0.0.19",
+    "image": "ghcr.io/openai/tunnel-client:v0.0.19@sha256:dcae53be336c062ffdc3f250a287b2a07724c344b8c370a50f54ad033af43151",
+    "platform_manifests": {
+      "linux/arm64": "sha256:e38276d38eff1b962be792920a9374d86f5931792b70da6f1e14af43a21d4b9f",
+      "linux/amd64": "sha256:e57bdf9b344ba79cc9762b332c1629eb942af6d5c8cb106824f909c8e2f4846e"
+    }
+  },
+  "vikunja": {"minimum": "2.7.0", "transport": "Streamable HTTP", "path": "/api/v2/mcp"}
+}

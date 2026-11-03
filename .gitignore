@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+secrets/
+config/local/
+compose.override.yaml
+compose.override.yml
+.local/
+__pycache__/
+*.py[cod]
+*.tar
+*.tar.gz
+*.zip

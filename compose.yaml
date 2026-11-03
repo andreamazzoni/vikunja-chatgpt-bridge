@@ -1,0 +1,65 @@
+name: vikunja-chatgpt-bridge
+
+services:
+  tunnel-client:
+    image: ${BRIDGE_IMAGE:-ghcr.io/openai/tunnel-client:v0.0.19@sha256:dcae53be336c062ffdc3f250a287b2a07724c344b8c370a50f54ad033af43151}
+    # Upstream ENTRYPOINT already includes `run`.
+    command: ["--control-plane.api-key=file:/run/secrets/openai_api_key"]
+    init: true
+    user: "${BRIDGE_UID:-1000}:${BRIDGE_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    pids_limit: 64
+    mem_limit: 384m
+    cpus: 2
+    environment:
+      CONTROL_PLANE_TUNNEL_ID: ${OPENAI_TUNNEL_ID:?Run python3 scripts/setup.py first}
+      CONTROL_PLANE_ORGANIZATION_ID: ${OPENAI_ORGANIZATION_ID:-}
+      # Only the Vikunja MCP channel is used; OAuth/Harpoon are not prerequisites.
+      CONTROL_PLANE_POLL_CHANNELS: main
+      MCP_SERVER_URL: ${VIKUNJA_MCP_URL:?Run python3 scripts/setup.py first}
+      MCP_EXTRA_HEADERS: "Authorization: file:/run/secrets/vikunja_authorization"
+      HEALTH_LISTEN_ADDR: "127.0.0.1:8080"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      SSL_CERT_FILE: ${BRIDGE_CA_FILE:-/etc/ssl/certs/ca-certificates.crt}
+      HOME: /tmp
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,uid=${BRIDGE_UID:-1000},gid=${BRIDGE_GID:-1000},mode=0700
+    volumes:
+      - type: bind
+        source: ./bridge/healthcheck.sh
+        target: /opt/bridge/healthcheck.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./config/local
+        target: /etc/vikunja-bridge
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - openai_api_key
+      - vikunja_authorization
+    # No published ports: the admin listener is container-local.
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/bridge/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  openai_api_key:
+    file: ./secrets/openai_api_key
+  vikunja_authorization:
+    file: ./secrets/vikunja_authorization
