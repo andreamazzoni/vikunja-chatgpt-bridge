@@ -1,8 +1,19 @@
 # vikunja-chatgpt-bridge
 
-Connect self-hosted Vikunja to ChatGPT through OpenAI Secure MCP Tunnel.
-Docker Compose runs the official tunnel-client and forwards MCP requests to
-Vikunja over HTTPS.
+Create a private **Vikunja plugin for ChatGPT** that you can enable in a chat
+and use to ask about projects and tasks in your self-hosted instance.
+The Docker Compose bridge runs the official tunnel-client and connects
+the plugin to Vikunja over HTTPS through OpenAI Secure MCP Tunnel.
+
+## Example prompts
+
+Enable the Vikunja plugin in a ChatGPT conversation and try either prompt
+with a read-only token:
+
+- **Plan your week.** “In my Home project, which open tasks are overdue or
+  due in the next seven days? Group them by due date.”
+- **Catch up on a project.** “Summarize the open tasks in my Home project.
+  Flag tasks without a due date and include links where available.”
 
 | Component | Version or requirement |
 | --- | --- |
@@ -30,8 +41,10 @@ python3 scripts/bridge.py install
 
 The installer downloads the pinned image, collects credentials with hidden
 input, checks Compose and TLS, and starts the container after confirmation.
-Connect the tunnel to ChatGPT using **No Authentication**. The tunnel client
-adds the Vikunja Bearer token on the local HTTPS connection.
+In ChatGPT, add a custom MCP server named **Vikunja**, select **Tunnel** and
+**No Authentication**, then install the plugin and enable it in a new chat.
+The tunnel client adds the Vikunja Bearer token on the local HTTPS connection.
+See the [ChatGPT setup steps](docs/setup.md#5-connect-the-custom-app-in-chatgpt).
 
 ## Commands
 
