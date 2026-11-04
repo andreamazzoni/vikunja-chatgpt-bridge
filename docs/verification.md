@@ -65,4 +65,5 @@ For each new installation, verify workspace association and token scope,
 connect the app through **Tunnel** with **No Authentication**, and confirm
 one read-only operation from ChatGPT. The tool catalog can include write
 tools even when the token blocks them. Obtain an explicit request before
-testing writes. [Setup guide](setup.md)
+testing writes. [ChatGPT setup](setup.md#connect-the-custom-app-in-chatgpt) ·
+[Token changes and write testing](operations.md#change-or-rotate-the-vikunja-token)

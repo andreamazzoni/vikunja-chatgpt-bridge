@@ -29,3 +29,21 @@ for any required outbound network restrictions.
 This deployment is intended for private ChatGPT integrations. Publishing
 the repository source is separate from distributing a public ChatGPT
 plugin. Public plugins require a stable public HTTPS endpoint.
+
+## MCP probe and container health
+
+The host probe sends `initialize`, `notifications/initialized`, and paginated
+`tools/list`. It accepts JSON and SSE responses, rejects redirects, and
+reports tool names and counts.
+
+The container health script reads `/healthz`, `/health/mcp`, and `/metrics`
+to check liveness, successful initial MCP initialization, and recent
+control-plane polling. A successful check exits silently.
+
+`CONTROL_PLANE_POLL_CHANNELS=main` limits polling to the Vikunja channel.
+In tunnel-client 0.0.19, unscoped polling can wait for the OAuth catalog
+when discovery URLs return frontend HTML with HTTP 200. Background discovery
+can still log warnings and leave upstream `/readyz` at
+`oauth discovery pending`. The bridge checks main-channel health separately.
+Review the polling scope and health criteria before adding OAuth.
+[Observed behavior and fixture coverage](verification.md#oauth-discovery-on-the-live-instance)

@@ -1,22 +1,55 @@
 # Operations
 
-Use `python3 scripts/bridge.py status` for container state and the last saved
-probe. Run `python3 scripts/bridge.py probe` for a fresh MCP handshake and
-catalog. Add `--json` to either command for structured output.
+See the [basic commands](../README.md#basic-commands) to start, stop, or
+restart the bridge. Add `--json` to `status` or `probe` for structured output.
+
+## Check the connection
+
+| Check | What it tells you |
+| --- | --- |
+| Container health | The client is alive, its initial MCP probe succeeded, and it successfully polled OpenAI within the last 120 seconds. |
+| Fresh MCP probe | The host can connect to Vikunja, authenticate, and list MCP tools. |
+| ChatGPT read | The app can retrieve data from Vikunja through the tunnel in your workspace. |
+
+For the last check, compare a read-only result from ChatGPT with the same
+project in Vikunja. [ChatGPT setup](setup.md#connect-the-custom-app-in-chatgpt)
+
+Docker restarts a terminated client unless you stopped the container. It
+reports `unhealthy` separately. The client retries control-plane connections.
+
+## Maintenance commands
 
 | Operation | Command |
 | --- | --- |
-| Stop | `python3 scripts/bridge.py stop` |
-| Start after checking for other clients on the tunnel | `python3 scripts/bridge.py start --single-instance-confirmed` |
-| Recreate and wait for health | `python3 scripts/bridge.py restart` |
+| Pull the configured, pinned image | `python3 scripts/bridge.py build` |
+| Check Compose configuration and TLS | `python3 scripts/bridge.py validate` |
 | Inspect deployment health | `docker compose exec -T tunnel-client /bin/sh /opt/bridge/healthcheck.sh` |
 | Check the running binary version | `docker compose exec -T tunnel-client /usr/bin/tunnel-client --version` |
 | Run client diagnostics | `docker compose exec -T tunnel-client /usr/bin/tunnel-client doctor --control-plane.api-key=file:/run/secrets/openai_api_key --explain` |
 
-`doctor` can contact the configured services and initialize MCP. The
-ChatGPT call is a separate end-to-end test. Keep raw HTTP tracing disabled
-and review diagnostics before sharing them. Docker retains three log files
-of up to 10 MiB each.
+`doctor` can contact the configured services and initialize MCP. Keep raw
+HTTP tracing disabled and review diagnostics before sharing them. Docker
+retains three log files of up to 10 MiB each.
+
+## Change or rotate the Vikunja token
+
+1. Create a replacement token in **Settings → MCP**. Keep **MCP → Access** and
+   select the read permissions you need. To enable writes, grant the specific
+   write permissions required for your use case.
+2. From the repository directory, run `docker compose down` to remove the
+   container and release its credential mounts. Run `python3 scripts/setup.py`
+   and enter the replacement token at the hidden prompt. Press Enter at the
+   OpenAI key prompt to keep the existing key.
+3. Check that no other client uses the tunnel, then run
+   `python3 scripts/bridge.py start --single-instance-confirmed`. Run
+   `python3 scripts/bridge.py probe`, refresh the ChatGPT app's tool catalog,
+   and verify read access from a new chat.
+4. Revoke the old token in Vikunja after verifying the replacement.
+
+To test a write, use a dedicated test project and specify the exact task and
+change in your request. Verify the result in Vikunja. Treat edits or deletion
+of test data as separate requests. Writing to real data requires an explicit
+request.
 
 ## Update and rollback
 
